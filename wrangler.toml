@@ -14,8 +14,7 @@ database_name = "projects-tracker"
 database_id = "70112d09-67fb-4cad-993b-8dd1a1e9c7e2"
 
 [vars]
-NEXTAUTH_URL = "http://localhost:3000"
+NEXTAUTH_URL = "https://amanat-tracker.pages.dev"
 
-# Production env vars are set via Cloudflare Pages dashboard:
-#   AUTH_SECRET      (generated with `openssl rand -base64 32`)
-#   NEXTAUTH_URL     (production domain, e.g. https://amanat.pages.dev)
+# AUTH_SECRET is set as an encrypted Secret in the Cloudflare Pages dashboard
+# (Settings -> Environment variables -> Add variable -> check "Encrypt").
