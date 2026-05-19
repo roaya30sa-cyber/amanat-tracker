@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
-  LayoutDashboard, ClipboardList, AlertTriangle, CalendarDays, Users, Folder, LogOut, KeyRound,
+  LayoutDashboard, ClipboardList, AlertTriangle, CalendarDays, Users, Folder, LogOut, KeyRound, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,17 +15,19 @@ const NAV: NavItem[] = [
   { href: '/tasks',           label: 'المهام',              icon: ClipboardList },
   { href: '/risks',           label: 'سجل المخاطر',        icon: AlertTriangle },
   { href: '/weekly-reports',  label: 'التقارير الأسبوعية',  icon: CalendarDays },
-  { href: '/admin/users',     label: 'المستخدمون',         icon: Users,  adminOnly: true },
-  { href: '/admin/reference', label: 'البيانات المرجعية',  icon: Folder, adminOnly: true },
+  { href: '/admin/projects',  label: 'المشاريع',           icon: Building2, adminOnly: true },
+  { href: '/admin/users',     label: 'المستخدمون',         icon: Users,     adminOnly: true },
+  { href: '/admin/reference', label: 'البيانات المرجعية',  icon: Folder,    adminOnly: true },
 ];
 
 interface SidebarProps {
   role: 'admin' | 'regional_manager' | 'viewer';
   userName: string;
   regionLabel: string;
+  projectLabel: string;
 }
 
-export function Sidebar({ role, userName, regionLabel }: SidebarProps) {
+export function Sidebar({ role, userName, regionLabel, projectLabel }: SidebarProps) {
   const pathname = usePathname();
   const visible = NAV.filter(n => !n.adminOnly || role === 'admin');
 
@@ -71,7 +73,7 @@ export function Sidebar({ role, userName, regionLabel }: SidebarProps) {
           </div>
           <div className="overflow-hidden">
             <div className="text-sm font-bold truncate">{userName}</div>
-            <div className="text-[11px] text-white/60 truncate">{regionLabel}</div>
+            <div className="text-[11px] text-white/60 truncate">{projectLabel} · {regionLabel}</div>
           </div>
         </div>
         <Link

@@ -20,6 +20,8 @@ declare module 'next-auth' {
       role: Role;
       regionId: number | null;
       regionCode: string | null;
+      projectId: number | null;       // NULL for super-admin
+      projectNameAr: string | null;
       mustChangePassword: boolean;
       name?: string | null;
       email?: string | null;
@@ -34,6 +36,8 @@ declare module 'next-auth/jwt' {
     role?: Role;
     regionId?: number | null;
     regionCode?: string | null;
+    projectId?: number | null;
+    projectNameAr?: string | null;
     mustChangePassword?: boolean;
     fullName?: string | null;
   }
@@ -57,17 +61,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const row = await db
             .prepare(
               `SELECT u.id, u.username, u.password_hash, u.full_name, u.email,
-                      u.role, u.region_id, u.must_change_password, u.is_active,
-                      r.code AS region_code
+                      u.role, u.region_id, u.project_id, u.must_change_password, u.is_active,
+                      r.code AS region_code,
+                      p.name_ar AS project_name_ar
                  FROM users u
-                 LEFT JOIN regions r ON r.id = u.region_id
+                 LEFT JOIN regions  r ON r.id = u.region_id
+                 LEFT JOIN projects p ON p.id = u.project_id
                 WHERE LOWER(u.username) = LOWER(?)`
             )
             .bind(username)
             .first<{
               id: number; username: string; password_hash: string; full_name: string | null; email: string | null;
-              role: Role; region_id: number | null; must_change_password: number; is_active: number;
-              region_code: string | null;
+              role: Role; region_id: number | null; project_id: number | null; must_change_password: number; is_active: number;
+              region_code: string | null; project_name_ar: string | null;
             }>();
 
           if (!row) return null;
@@ -89,6 +95,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: row.role,
             regionId: row.region_id,
             regionCode: row.region_code,
+            projectId: row.project_id,
+            projectNameAr: row.project_name_ar,
             mustChangePassword: !!row.must_change_password,
           } as any;
         } catch (e) {
@@ -109,6 +117,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role               = u.role;
         token.regionId           = u.regionId;
         token.regionCode         = u.regionCode;
+        token.projectId          = u.projectId;
+        token.projectNameAr      = u.projectNameAr;
         token.mustChangePassword = u.mustChangePassword;
         token.fullName           = u.name;
       }
@@ -126,6 +136,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: (token.role ?? 'viewer') as Role,
           regionId: token.regionId ?? null,
           regionCode: token.regionCode ?? null,
+          projectId: token.projectId ?? null,
+          projectNameAr: token.projectNameAr ?? null,
           mustChangePassword: !!token.mustChangePassword,
           name: token.fullName ?? null,
           email: session.user?.email ?? null,

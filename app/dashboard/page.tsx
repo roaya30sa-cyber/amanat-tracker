@@ -1,9 +1,11 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { auth } from '@/lib/auth';
 import { getDB } from '@/lib/db';
+import { cookies } from 'next/headers';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CompletionBarChart, StatusDoughnut } from '@/components/dashboard/Charts';
 import { computeTaskStats, computeRiskStats, performanceLabel, performanceEval } from '@/lib/formulas';
+import { PROJECT_COOKIE } from '@/lib/access';
 import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle } from 'lucide-react';
 
 export const runtime = 'edge';
@@ -13,18 +15,41 @@ export default async function DashboardPage() {
   const db = getDB();
   const isAdmin   = session.user.role === 'admin';
   const regionId  = session.user.regionId;
-  const regionFilter = isAdmin ? '' : 'WHERE region_id = ?';
-  const bindings: any[] = isAdmin ? [] : [regionId];
 
-  // Pull what we need in parallel for the edge
-  const [tasksRes, risksRes, regionsRes] = await Promise.all([
-    db.prepare(`SELECT region_id, status, completion_percent, deadline FROM tasks ${regionFilter}`).bind(...bindings).all(),
-    db.prepare(`SELECT region_id, probability, impact, risk_level FROM risks ${regionFilter}`).bind(...bindings).all(),
-    db.prepare(`SELECT id, code, name_ar, color_hex FROM regions ORDER BY id`).all(),
+  // Resolve active project_id: admins → cookie (null = all); others → their assigned project.
+  let activeProjectId: number | null = null;
+  if (isAdmin) {
+    const cv = cookies().get(PROJECT_COOKIE)?.value;
+    if (cv && cv !== 'all') {
+      const n = parseInt(cv, 10);
+      if (Number.isFinite(n) && n > 0) activeProjectId = n;
+    }
+  } else {
+    activeProjectId = session.user.projectId;
+  }
+
+  // Compose WHERE clause for tasks/risks queries.
+  const conds: string[] = [];
+  const binds: any[] = [];
+  if (!isAdmin && regionId) { conds.push('region_id = ?'); binds.push(regionId); }
+  if (activeProjectId)      { conds.push('project_id = ?'); binds.push(activeProjectId); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+  // Regions list is also project-scoped when a project is selected.
+  const regionsWhere = activeProjectId ? 'WHERE project_id = ? OR project_id IS NULL' : '';
+  const regionsBinds = activeProjectId ? [activeProjectId] : [];
+
+  const [tasksRes, risksRes, regionsRes, activeProj] = await Promise.all([
+    db.prepare(`SELECT region_id, status, completion_percent, deadline, project_id FROM tasks ${where}`).bind(...binds).all(),
+    db.prepare(`SELECT region_id, probability, impact, risk_level, project_id FROM risks ${where}`).bind(...binds).all(),
+    db.prepare(`SELECT id, code, name_ar, color_hex FROM regions ${regionsWhere} ORDER BY id`).bind(...regionsBinds).all(),
+    activeProjectId
+      ? db.prepare(`SELECT id, name_ar FROM projects WHERE id = ?`).bind(activeProjectId).first<{ id: number; name_ar: string }>()
+      : Promise.resolve(null),
   ]);
 
-  const tasks  = (tasksRes.results  ?? []) as any[];
-  const risks  = (risksRes.results  ?? []) as any[];
+  const tasks   = (tasksRes.results   ?? []) as any[];
+  const risks   = (risksRes.results   ?? []) as any[];
   const regions = (regionsRes.results ?? []) as any[];
 
   const taskStats = computeTaskStats(tasks);
@@ -44,8 +69,7 @@ export default async function DashboardPage() {
     });
   } else {
     chartTitle = 'نسبة الإنجاز حسب المرحلة';
-    // We need to fetch phase column too — refetch quickly
-    const phRes = await db.prepare(`SELECT phase, completion_percent FROM tasks ${regionFilter}`).bind(...bindings).all();
+    const phRes = await db.prepare(`SELECT phase, completion_percent FROM tasks ${where}`).bind(...binds).all();
     const phTasks = (phRes.results ?? []) as any[];
     const colors = ['#1F3864', '#2E8B8B', '#F39C12', '#7D3C98'];
     chartData = phasesAr.map((p, i) => {
@@ -55,8 +79,18 @@ export default async function DashboardPage() {
     });
   }
 
+  const projectBanner = activeProj
+    ? `🏢 ${activeProj.name_ar}`
+    : (isAdmin ? '🌐 جميع المشاريع' : '');
+
   return (
     <AppShell title="📊 لوحة التحكم">
+      {projectBanner && (
+        <div className="mb-5 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-soft text-brand-navy text-sm font-bold">
+          {projectBanner}
+        </div>
+      )}
+
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-7">
         <KpiCard label="إجمالي المهام"     value={taskStats.total}       icon={ClipboardList} color="navy" />
@@ -141,6 +175,7 @@ export default async function DashboardPage() {
           <li>⬡ <b>إضافة مهمة:</b> من صفحة "المهام" اضغط "+ إضافة مهمة جديدة"</li>
           <li>⬡ <b>إضافة خطر:</b> من صفحة "سجل المخاطر" — مستوى الخطر يُحسب تلقائياً (الاحتمالية × التأثير)</li>
           <li>⬡ <b>تتبع العوائق:</b> من صفحة "التقارير الأسبوعية"</li>
+          {isAdmin && <li>⬡ <b>تبديل المشروع:</b> من القائمة المنسدلة "المشروع" في أعلى الصفحة. اختر "جميع المشاريع" لرؤية البيانات المجمّعة.</li>}
           <li>⬡ جميع الإحصائيات تتحدث فوراً عند إضافة/تعديل أي بيان</li>
         </ul>
       </div>

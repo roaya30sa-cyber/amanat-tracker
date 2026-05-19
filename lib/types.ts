@@ -1,12 +1,21 @@
-// Core domain types — match the D1 schema in migrations/0001_init.sql
+// Core domain types — match the D1 schema in migrations/0001_init.sql + 0002_multi_project.sql
 
 export type RegionCode = 'JAZ' | 'EST' | 'NOR';
+
+export interface Project {
+  id: number;
+  code: string;
+  name_ar: string;
+  is_active: 0 | 1;
+  created_at: number;
+}
 
 export interface Region {
   id: number;
   code: RegionCode;
   name_ar: string;
   color_hex: string | null;
+  project_id: number | null;
 }
 
 export type Role = 'admin' | 'regional_manager' | 'viewer';
@@ -18,6 +27,7 @@ export interface User {
   full_name: string | null;
   role: Role;
   region_id: number | null;
+  project_id: number | null;       // NULL for super-admin
   must_change_password: 0 | 1;
   last_login_at: number | null;
   is_active: 0 | 1;
@@ -33,6 +43,8 @@ export interface Task {
   region_id: number;
   region_code?: RegionCode;
   region_name_ar?: string;
+  project_id: number;
+  project_name_ar?: string;
   task_name: string;
   phase: string | null;
   deadline: string | null;        // YYYY-MM-DD
@@ -52,6 +64,8 @@ export interface Risk {
   region_id: number;
   region_code?: RegionCode;
   region_name_ar?: string;
+  project_id: number;
+  project_name_ar?: string;
   risk_description: string;
   affected_project: string | null;
   category: string | null;
@@ -71,6 +85,8 @@ export interface WeeklyReport {
   region_id: number;
   region_code?: RegionCode;
   region_name_ar?: string;
+  project_id: number;
+  project_name_ar?: string;
   report_date: string;
   current_task: string;
   priority: Priority | null;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db';
-import { requireSession, assertRegionAccess, handleAccess } from '@/lib/access';
+import { requireSession, assertRegionAccess, assertProjectAccess, handleAccess } from '@/lib/access';
 
 export const runtime = 'edge';
 
@@ -16,6 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const existing = await loadOne(id);
     if (!existing) throw NextResponse.json({ error: 'not found' }, { status: 404 });
     assertRegionAccess(session, existing.region_id);
+    assertProjectAccess(session, existing.project_id);
     const body = await req.json();
     if (session.user.role !== 'admin' && body.region_id && parseInt(body.region_id) !== existing.region_id) {
       throw NextResponse.json({ error: 'cannot change region' }, { status: 403 });
@@ -29,8 +30,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const db = getDB();
     await db.prepare(`UPDATE weekly_reports SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
     const full = await db.prepare(`
-      SELECT w.*, r.code AS region_code, r.name_ar AS region_name_ar
-        FROM weekly_reports w JOIN regions r ON r.id = w.region_id WHERE w.id = ?
+      SELECT w.*, r.code AS region_code, r.name_ar AS region_name_ar,
+             p.name_ar AS project_name_ar
+        FROM weekly_reports w
+        JOIN regions r ON r.id = w.region_id
+        LEFT JOIN projects p ON p.id = w.project_id
+       WHERE w.id = ?
     `).bind(id).first();
     return NextResponse.json(full);
   });
@@ -44,6 +49,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const existing = await loadOne(id);
     if (!existing) throw NextResponse.json({ error: 'not found' }, { status: 404 });
     assertRegionAccess(session, existing.region_id);
+    assertProjectAccess(session, existing.project_id);
     await getDB().prepare(`DELETE FROM weekly_reports WHERE id = ?`).bind(id).run();
     return NextResponse.json({ ok: true });
   });

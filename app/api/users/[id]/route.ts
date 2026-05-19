@@ -4,7 +4,7 @@ import { requireAdmin, handleAccess } from '@/lib/access';
 
 export const runtime = 'edge';
 
-const SAFE_USER_COLUMNS = `id, username, email, full_name, role, region_id, must_change_password, last_login_at, is_active, created_at`;
+const SAFE_USER_COLUMNS = `id, username, email, full_name, role, region_id, project_id, must_change_password, last_login_at, is_active, created_at`;
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   return handleAccess(async () => {
@@ -17,11 +17,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if ('role' in body) {
       if (!['admin','regional_manager','viewer'].includes(body.role)) throw NextResponse.json({ error: 'role غير صحيح' }, { status: 400 });
       updates.push('role = ?'); binds.push(body.role);
-      // Admin role => clear region_id automatically (unless explicitly set)
-      if (body.role === 'admin' && !('region_id' in body)) { updates.push('region_id = NULL'); }
+      // Admin role => clear region_id + project_id (super-admin scope)
+      if (body.role === 'admin') {
+        if (!('region_id'  in body)) { updates.push('region_id  = NULL'); }
+        if (!('project_id' in body)) { updates.push('project_id = NULL'); }
+      }
     }
-    if ('region_id' in body) { updates.push('region_id = ?'); binds.push(body.region_id); }
-    if ('is_active' in body) { updates.push('is_active = ?'); binds.push(body.is_active ? 1 : 0); }
+    if ('region_id'  in body) { updates.push('region_id = ?');  binds.push(body.region_id);  }
+    if ('project_id' in body) { updates.push('project_id = ?'); binds.push(body.project_id); }
+    if ('is_active'  in body) { updates.push('is_active = ?');  binds.push(body.is_active ? 1 : 0); }
     if (!updates.length) throw NextResponse.json({ error: 'no changes' }, { status: 400 });
     binds.push(id);
     const db = getDB();

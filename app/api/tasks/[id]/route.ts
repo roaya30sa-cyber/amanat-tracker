@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db';
-import { requireSession, assertRegionAccess, handleAccess } from '@/lib/access';
+import { requireSession, assertRegionAccess, assertProjectAccess, handleAccess } from '@/lib/access';
 
 export const runtime = 'edge';
 
@@ -27,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const existing = await loadTask(id);
     if (!existing) throw NextResponse.json({ error: 'not found' }, { status: 404 });
     assertRegionAccess(session, existing.region_id);
+    assertProjectAccess(session, existing.project_id);
     if (session.user.role !== 'admin') {
       // Non-admins cannot move a task to a different region
       const body0 = await req.clone().json().catch(() => ({}));
@@ -50,8 +51,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const db = getDB();
     await db.prepare(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`).bind(...binds).run();
     const full = await db.prepare(`
-      SELECT t.*, r.code AS region_code, r.name_ar AS region_name_ar
-        FROM tasks t JOIN regions r ON r.id = t.region_id WHERE t.id = ?
+      SELECT t.*, r.code AS region_code, r.name_ar AS region_name_ar,
+             p.name_ar AS project_name_ar
+        FROM tasks t
+        JOIN regions  r ON r.id = t.region_id
+        LEFT JOIN projects p ON p.id = t.project_id
+       WHERE t.id = ?
     `).bind(id).first();
     return NextResponse.json(full);
   });
@@ -65,6 +70,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const existing = await loadTask(id);
     if (!existing) throw NextResponse.json({ error: 'not found' }, { status: 404 });
     assertRegionAccess(session, existing.region_id);
+    assertProjectAccess(session, existing.project_id);
     const db = getDB();
     await db.prepare(`DELETE FROM tasks WHERE id = ?`).bind(id).run();
     return NextResponse.json({ ok: true });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { User, Region, Role } from '@/lib/types';
+import type { User, Region, Role, Project } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,9 +12,9 @@ import { Pencil, Trash2, Plus, KeyRound, ShieldOff, ShieldCheck } from 'lucide-r
 
 const ROLE_AR: Record<Role,string> = { admin: 'مدير النظام', regional_manager: 'مدير منطقة', viewer: 'مشاهد' };
 
-interface Props { initial: User[]; regions: Region[]; currentUserId: number; }
+interface Props { initial: User[]; regions: Region[]; projects: Project[]; currentUserId: number; }
 
-export function UsersTable({ initial, regions, currentUserId }: Props) {
+export function UsersTable({ initial, regions, projects, currentUserId }: Props) {
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>(initial);
 
@@ -23,7 +23,9 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
   const [editing, setEditing] = useState<User | null>(null);
   const emptyForm = {
     username: '', password: '', full_name: '', email: '',
-    role: 'regional_manager' as Role, region_id: regions[0]?.id ?? null as number | null,
+    role: 'regional_manager' as Role,
+    region_id:  regions[0]?.id  ?? null as number | null,
+    project_id: projects[0]?.id ?? null as number | null,
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -35,14 +37,16 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
 
   function openCreate() {
     setEditing(null);
-    setForm({ ...emptyForm, region_id: regions[0]?.id ?? null });
+    setForm({ ...emptyForm, region_id: regions[0]?.id ?? null, project_id: projects[0]?.id ?? null });
     setOpen(true);
   }
   function openEdit(u: User) {
     setEditing(u);
     setForm({
       username: u.username, password: '', full_name: u.full_name ?? '',
-      email: u.email ?? '', role: u.role, region_id: u.region_id,
+      email: u.email ?? '', role: u.role,
+      region_id: u.region_id,
+      project_id: u.project_id,
     });
     setOpen(true);
   }
@@ -53,7 +57,8 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
       full_name: form.full_name || null,
       email: form.email || null,
       role: form.role,
-      region_id: form.role === 'admin' ? null : form.region_id,
+      region_id:  form.role === 'admin' ? null : form.region_id,
+      project_id: form.role === 'admin' ? null : form.project_id,
     };
     if (!editing) {
       payload.username = form.username;
@@ -131,6 +136,7 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
               <th className="p-3 font-bold">الاسم الكامل</th>
               <th className="p-3 font-bold">الإيميل</th>
               <th className="p-3 font-bold">الدور</th>
+              <th className="p-3 font-bold">المشروع</th>
               <th className="p-3 font-bold">المنطقة</th>
               <th className="p-3 font-bold">الحالة</th>
               <th className="p-3 font-bold">آخر دخول</th>
@@ -139,7 +145,8 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
           </thead>
           <tbody>
             {users.map(u => {
-              const region = u.region_id ? regions.find(r => r.id === u.region_id) : null;
+              const region  = u.region_id  ? regions.find(r => r.id === u.region_id)   : null;
+              const project = u.project_id ? projects.find(p => p.id === u.project_id) : null;
               const lastLogin = u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ar-SA') : '—';
               return (
                 <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -147,7 +154,8 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
                   <td className="p-3">{u.full_name ?? '—'}</td>
                   <td className="p-3 ltr-only text-left text-xs">{u.email ?? '—'}</td>
                   <td className="p-3"><Badge variant="info">{ROLE_AR[u.role]}</Badge></td>
-                  <td className="p-3">{region?.name_ar ?? 'جميع المناطق'}</td>
+                  <td className="p-3">{project?.name_ar ?? <span className="text-xs text-muted-foreground">جميع المشاريع</span>}</td>
+                  <td className="p-3">{region?.name_ar  ?? 'جميع المناطق'}</td>
                   <td className="p-3">
                     {u.is_active
                       ? <Badge variant="success">نشط</Badge>
@@ -208,13 +216,22 @@ export function UsersTable({ initial, regions, currentUserId }: Props) {
               </select>
             </div>
             {form.role !== 'admin' && (
-              <div>
-                <Label>المنطقة *</Label>
-                <select className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm" required
-                  value={form.region_id ?? ''} onChange={e => setForm({...form, region_id: parseInt(e.target.value)})}>
-                  {regions.map(r => <option key={r.id} value={r.id}>{r.name_ar}</option>)}
-                </select>
-              </div>
+              <>
+                <div>
+                  <Label>المشروع *</Label>
+                  <select className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm" required
+                    value={form.project_id ?? ''} onChange={e => setForm({...form, project_id: parseInt(e.target.value)})}>
+                    {projects.filter(p => p.is_active).map(p => <option key={p.id} value={p.id}>{p.name_ar}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>المنطقة *</Label>
+                  <select className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm" required
+                    value={form.region_id ?? ''} onChange={e => setForm({...form, region_id: parseInt(e.target.value)})}>
+                    {regions.map(r => <option key={r.id} value={r.id}>{r.name_ar}</option>)}
+                  </select>
+                </div>
+              </>
             )}
             <DialogFooter>
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>إلغاء</Button>
