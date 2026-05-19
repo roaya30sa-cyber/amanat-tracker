@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { Risk, Region } from '@/lib/types';
-import { riskBucket, computeRiskStats, RISK_STATUS_AR } from '@/lib/formulas';
+import { riskBucket, computeRiskStats, RISK_STATUS_AR, toCSV } from '@/lib/formulas';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
-import { Pencil, Trash2, Plus } from 'lucide-react';
+import { Pencil, Trash2, Plus, Download, Printer } from 'lucide-react';
 import { RiskModal } from './RiskModal';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { BarChart3, AlertOctagon, AlertTriangle, AlertCircle, Info, TrendingUp } from 'lucide-react';
@@ -47,6 +47,51 @@ export function RiskTable({ initial, regions, categories, isAdmin, userRegionId 
     else { const err = (await res.json().catch(() => ({}))) as { error?: string }; toast({ title: 'فشل الحذف', description: err.error, variant: 'destructive' }); }
   }
 
+  function exportCSV() {
+    const csv = toCSV(filtered.map(r => ({
+      id: r.id,
+      project: r.project_name_ar ?? '',
+      region: r.region_name_ar ?? '',
+      description: r.risk_description,
+      affected_project: r.affected_project ?? '',
+      category: r.category ?? '',
+      probability: r.probability,
+      impact: r.impact,
+      risk_level: r.risk_level,
+      bucket: riskBucket(r.risk_level).txt,
+      response_plan: r.response_plan ?? '',
+      owner: r.owner ?? '',
+      status: RISK_STATUS_AR[r.status] ?? r.status,
+      notes: r.notes ?? '',
+      created_at: new Date(r.created_at).toLocaleString('ar-SA'),
+      updated_at: new Date(r.updated_at).toLocaleString('ar-SA'),
+    })), [
+      { key: 'id',               label: 'المعرف' },
+      { key: 'project',          label: 'المشروع' },
+      { key: 'region',           label: 'المنطقة' },
+      { key: 'description',      label: 'وصف الخطر' },
+      { key: 'affected_project', label: 'المشروع المتأثر' },
+      { key: 'category',         label: 'الفئة' },
+      { key: 'probability',      label: 'الاحتمالية' },
+      { key: 'impact',           label: 'التأثير' },
+      { key: 'risk_level',       label: 'المستوى' },
+      { key: 'bucket',           label: 'التصنيف' },
+      { key: 'response_plan',    label: 'خطة الاستجابة' },
+      { key: 'owner',            label: 'المسؤول' },
+      { key: 'status',           label: 'الحالة' },
+      { key: 'notes',            label: 'الملاحظات' },
+      { key: 'created_at',       label: 'تاريخ الإنشاء' },
+      { key: 'updated_at',       label: 'آخر تعديل' },
+    ]);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `risks-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: `تم تصدير ${filtered.length} خطر` });
+  }
+
   return (
     <>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
@@ -76,9 +121,13 @@ export function RiskTable({ initial, regions, categories, isAdmin, userRegionId 
           <option value="controlled">🟢 تحت السيطرة</option>
         </select>
         <Input placeholder="🔍 بحث..." value={search} onChange={e => setSearch(e.target.value)} className="w-48" />
-        <Button onClick={() => { setEditing(null); setModalOpen(true); }} className="mr-auto">
-          <Plus className="h-4 w-4" /> إضافة خطر
-        </Button>
+        <div className="flex gap-2 mr-auto">
+          <Button variant="secondary" onClick={exportCSV} title="تصدير CSV"><Download className="h-4 w-4" />تصدير</Button>
+          <Button variant="secondary" onClick={() => window.print()} title="طباعة / حفظ PDF"><Printer className="h-4 w-4" />طباعة</Button>
+          <Button onClick={() => { setEditing(null); setModalOpen(true); }}>
+            <Plus className="h-4 w-4" /> إضافة خطر
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">

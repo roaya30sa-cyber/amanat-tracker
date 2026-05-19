@@ -4,11 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Pencil, Trash2, Check, X, Play, CheckCircle2, Inbox, Send, ListFilter } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Play, CheckCircle2, Inbox, Send, ListFilter, Download, Printer } from 'lucide-react';
 import type { Obstacle, ObstacleStatus, Role } from '@/lib/types';
 import { ObstacleStatusBadge } from './ObstacleStatusBadge';
 import { ObstacleModal } from './ObstacleModal';
 import { KpiCard } from '@/components/dashboard/KpiCard';
+import { toCSV } from '@/lib/formulas';
+
+const STATUS_LABEL: Record<ObstacleStatus, string> = {
+  pending_approval: 'بانتظار الاعتماد',
+  approved:         'معتمد',
+  in_progress:      'قيد التنفيذ',
+  resolved:         'تم الحل',
+  rejected:         'مرفوض',
+};
 
 interface Props {
   currentUserId: number;
@@ -73,6 +82,49 @@ export function ObstaclesView({ currentUserId, currentUserRole }: Props) {
     else toast({ title: 'فشل الحذف', variant: 'destructive' });
   }
 
+  function exportCSV() {
+    const csv = toCSV(items.map(o => ({
+      id: o.id,
+      project: o.project_name_ar ?? '',
+      region: o.region_name_ar ?? '',
+      from: o.from_user_name ?? '',
+      to: o.to_user_name ?? '',
+      statement: o.statement,
+      request: o.request ?? '',
+      notes: o.notes ?? '',
+      status: STATUS_LABEL[o.status] ?? o.status,
+      proposed_due: o.proposed_due_date ?? '',
+      approved_due: o.approved_due_date ?? '',
+      days_remaining: o.days_remaining ?? '',
+      is_overdue: o.is_overdue ? 'نعم' : 'لا',
+      created_at: new Date(o.created_at).toLocaleString('ar-SA'),
+      resolved_at: o.resolved_at ? new Date(o.resolved_at).toLocaleString('ar-SA') : '',
+    })), [
+      { key: 'id',             label: 'المعرف' },
+      { key: 'project',        label: 'المشروع' },
+      { key: 'region',         label: 'المنطقة' },
+      { key: 'from',           label: 'من' },
+      { key: 'to',             label: 'إلى' },
+      { key: 'statement',      label: 'البيان' },
+      { key: 'request',        label: 'الطلب' },
+      { key: 'notes',          label: 'الملاحظة' },
+      { key: 'status',         label: 'الحالة' },
+      { key: 'proposed_due',   label: 'الاستحقاق المقترح' },
+      { key: 'approved_due',   label: 'الاستحقاق المعتمد' },
+      { key: 'days_remaining', label: 'الأيام المتبقية' },
+      { key: 'is_overdue',     label: 'متأخر' },
+      { key: 'created_at',     label: 'تاريخ الإنشاء' },
+      { key: 'resolved_at',    label: 'تاريخ الإغلاق' },
+    ]);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `obstacles-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: `تم تصدير ${items.length} عائق` });
+  }
+
   // KPI counts
   const pendingApproval = items.filter(o => o.status === 'pending_approval').length;
   const inProgress      = items.filter(o => o.status === 'in_progress' || o.status === 'approved').length;
@@ -92,9 +144,13 @@ export function ObstaclesView({ currentUserId, currentUserRole }: Props) {
         <Button size="sm" variant={filter === 'all'   ? 'default' : 'secondary'} onClick={() => setFilter('all')}><ListFilter className="h-4 w-4" />الكل</Button>
         <Button size="sm" variant={filter === 'inbox' ? 'default' : 'secondary'} onClick={() => setFilter('inbox')}><Inbox className="h-4 w-4" />صادرة إليّ</Button>
         <Button size="sm" variant={filter === 'sent'  ? 'default' : 'secondary'} onClick={() => setFilter('sent')}><Send className="h-4 w-4" />أرسلتُها</Button>
-        <Button onClick={() => { setEditing(null); setModalOpen(true); }} className="mr-auto">
-          <Plus className="h-4 w-4" /> إضافة عائق جديد
-        </Button>
+        <div className="flex gap-2 mr-auto">
+          <Button variant="secondary" onClick={exportCSV} title="تصدير CSV"><Download className="h-4 w-4" />تصدير</Button>
+          <Button variant="secondary" onClick={() => window.print()} title="طباعة / حفظ PDF"><Printer className="h-4 w-4" />طباعة</Button>
+          <Button onClick={() => { setEditing(null); setModalOpen(true); }}>
+            <Plus className="h-4 w-4" /> إضافة عائق جديد
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
