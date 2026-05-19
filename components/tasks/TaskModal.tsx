@@ -7,8 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import type { Task, Region, TaskStatus, Priority } from '@/lib/types';
+import type { Task, Region, TaskStatus, Priority, Project } from '@/lib/types';
 import { todayIso } from '@/lib/utils';
+
+/**
+ * Read the admin's active project cookie set by ProjectSwitcher.
+ * Returns null if "all" or not set.
+ */
+function readActiveProjectIdFromCookie(): number | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)amanat_active_project=([^;]+)/);
+  if (!m) return null;
+  if (m[1] === 'all') return null;
+  const n = parseInt(decodeURIComponent(m[1]), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 interface Props {
   open: boolean;
@@ -25,8 +38,10 @@ const PHASES = ['الأعمال الإدارية', 'المراجعة والتق�
 export function TaskModal({ open, onOpenChange, task, regions, isAdmin, userRegionId, onSaved }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({
     region_id: userRegionId ?? (regions[0]?.id ?? 1),
+    project_id: null as number | null,
     task_name: '',
     phase: PHASES[0],
     deadline: todayIso(),
@@ -37,10 +52,20 @@ export function TaskModal({ open, onOpenChange, task, regions, isAdmin, userRegi
     notes: '',
   });
 
+  // Fetch projects list when modal opens for an admin (so they can pick when in "all" mode).
+  useEffect(() => {
+    if (!open || !isAdmin) return;
+    fetch('/api/projects', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((rows: Project[]) => setProjects(Array.isArray(rows) ? rows.filter(p => p.is_active) : []))
+      .catch(() => setProjects([]));
+  }, [open, isAdmin]);
+
   useEffect(() => {
     if (task) {
       setForm({
         region_id: task.region_id,
+        project_id: task.project_id,
         task_name: task.task_name,
         phase: task.phase ?? PHASES[0],
         deadline: task.deadline ?? todayIso(),
@@ -51,9 +76,14 @@ export function TaskModal({ open, onOpenChange, task, regions, isAdmin, userRegi
         notes: task.notes ?? '',
       });
     } else {
-      setForm(f => ({ ...f, region_id: userRegionId ?? (regions[0]?.id ?? 1) }));
+      const cookieProject = readActiveProjectIdFromCookie();
+      setForm(f => ({
+        ...f,
+        region_id: userRegionId ?? (regions[0]?.id ?? 1),
+        project_id: cookieProject ?? (projects[0]?.id ?? null),
+      }));
     }
-  }, [task, open, userRegionId, regions]);
+  }, [task, open, userRegionId, regions, projects]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,6 +110,15 @@ export function TaskModal({ open, onOpenChange, task, regions, isAdmin, userRegi
           <DialogTitle>{task ? 'تعديل المهمة' : 'إضافة مهمة جديدة'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
+          {isAdmin && !task && projects.length > 0 && (
+            <div>
+              <Label>المشروع *</Label>
+              <select required className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm"
+                value={form.project_id ?? ''} onChange={e => setForm({ ...form, project_id: parseInt(e.target.value) })}>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name_ar}</option>)}
+              </select>
+            </div>
+          )}
           {isAdmin && (
             <div>
               <Label>المنطقة</Label>

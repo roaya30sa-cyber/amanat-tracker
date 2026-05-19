@@ -8,7 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { todayIso } from '@/lib/utils';
-import type { WeeklyReport, Region, Priority } from '@/lib/types';
+import type { WeeklyReport, Region, Priority, Project } from '@/lib/types';
+
+function readActiveProjectIdFromCookie(): number | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)amanat_active_project=([^;]+)/);
+  if (!m) return null;
+  if (m[1] === 'all') return null;
+  const n = parseInt(decodeURIComponent(m[1]), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 interface Props {
   open: boolean; onOpenChange: (v: boolean) => void;
@@ -20,8 +29,10 @@ interface Props {
 export function WeeklyModal({ open, onOpenChange, item, regions, isAdmin, userRegionId, onSaved }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({
     region_id: userRegionId ?? (regions[0]?.id ?? 1),
+    project_id: null as number | null,
     report_date: todayIso(),
     current_task: '',
     priority: 'medium' as Priority,
@@ -32,14 +43,31 @@ export function WeeklyModal({ open, onOpenChange, item, regions, isAdmin, userRe
   });
 
   useEffect(() => {
+    if (!open || !isAdmin) return;
+    fetch('/api/projects', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((rows: Project[]) => setProjects(Array.isArray(rows) ? rows.filter(p => p.is_active) : []))
+      .catch(() => setProjects([]));
+  }, [open, isAdmin]);
+
+  useEffect(() => {
     if (item) setForm({
-      region_id: item.region_id, report_date: item.report_date,
+      region_id: item.region_id,
+      project_id: item.project_id,
+      report_date: item.report_date,
       current_task: item.current_task, priority: (item.priority ?? 'medium'),
       obstacles: item.obstacles ?? '', solution_plan: item.solution_plan ?? '',
       required_resources: item.required_resources ?? '', follow_up_date: item.follow_up_date ?? '',
     });
-    else setForm(f => ({ ...f, region_id: userRegionId ?? (regions[0]?.id ?? 1) }));
-  }, [item, open, userRegionId, regions]);
+    else {
+      const cookieProject = readActiveProjectIdFromCookie();
+      setForm(f => ({
+        ...f,
+        region_id: userRegionId ?? (regions[0]?.id ?? 1),
+        project_id: cookieProject ?? (projects[0]?.id ?? null),
+      }));
+    }
+  }, [item, open, userRegionId, regions, projects]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true);
@@ -56,6 +84,15 @@ export function WeeklyModal({ open, onOpenChange, item, regions, isAdmin, userRe
       <DialogContent>
         <DialogHeader><DialogTitle>{item ? 'تعديل التقرير' : 'إضافة عائق أسبوعي'}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
+          {isAdmin && !item && projects.length > 0 && (
+            <div>
+              <Label>المشروع *</Label>
+              <select required className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm"
+                value={form.project_id ?? ''} onChange={e => setForm({ ...form, project_id: parseInt(e.target.value) })}>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name_ar}</option>)}
+              </select>
+            </div>
+          )}
           {isAdmin && (
             <div>
               <Label>المنطقة *</Label>

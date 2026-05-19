@@ -8,7 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { riskBucket } from '@/lib/formulas';
-import type { Risk, Region, RiskStatus } from '@/lib/types';
+import type { Risk, Region, RiskStatus, Project } from '@/lib/types';
+
+function readActiveProjectIdFromCookie(): number | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)amanat_active_project=([^;]+)/);
+  if (!m) return null;
+  if (m[1] === 'all') return null;
+  const n = parseInt(decodeURIComponent(m[1]), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 interface Props {
   open: boolean; onOpenChange: (v: boolean) => void;
@@ -20,8 +29,10 @@ interface Props {
 export function RiskModal({ open, onOpenChange, risk, regions, categories, isAdmin, userRegionId, onSaved }: Props) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({
     region_id: userRegionId ?? (regions[0]?.id ?? 1),
+    project_id: null as number | null,
     risk_description: '',
     affected_project: '',
     category: categories[0] ?? '',
@@ -34,15 +45,32 @@ export function RiskModal({ open, onOpenChange, risk, regions, categories, isAdm
   });
 
   useEffect(() => {
+    if (!open || !isAdmin) return;
+    fetch('/api/projects', { cache: 'no-store' })
+      .then(r => r.json())
+      .then((rows: Project[]) => setProjects(Array.isArray(rows) ? rows.filter(p => p.is_active) : []))
+      .catch(() => setProjects([]));
+  }, [open, isAdmin]);
+
+  useEffect(() => {
     if (risk) setForm({
-      region_id: risk.region_id, risk_description: risk.risk_description,
+      region_id: risk.region_id,
+      project_id: risk.project_id,
+      risk_description: risk.risk_description,
       affected_project: risk.affected_project ?? '', category: risk.category ?? categories[0],
       probability: risk.probability, impact: risk.impact,
       response_plan: risk.response_plan ?? '', owner: risk.owner ?? '',
       status: risk.status, notes: risk.notes ?? '',
     });
-    else setForm(f => ({ ...f, region_id: userRegionId ?? (regions[0]?.id ?? 1) }));
-  }, [risk, open, userRegionId, regions, categories]);
+    else {
+      const cookieProject = readActiveProjectIdFromCookie();
+      setForm(f => ({
+        ...f,
+        region_id: userRegionId ?? (regions[0]?.id ?? 1),
+        project_id: cookieProject ?? (projects[0]?.id ?? null),
+      }));
+    }
+  }, [risk, open, userRegionId, regions, categories, projects]);
 
   const lvl = form.probability * form.impact;
   const bucket = riskBucket(lvl);
@@ -69,6 +97,15 @@ export function RiskModal({ open, onOpenChange, risk, regions, categories, isAdm
       <DialogContent>
         <DialogHeader><DialogTitle>{risk ? 'تعديل الخطر' : 'إضافة خطر جديد'}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
+          {isAdmin && !risk && projects.length > 0 && (
+            <div>
+              <Label>المشروع *</Label>
+              <select required className="h-10 w-full mt-1 px-3 border border-input rounded-lg bg-white text-sm"
+                value={form.project_id ?? ''} onChange={e => setForm({ ...form, project_id: parseInt(e.target.value) })}>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name_ar}</option>)}
+              </select>
+            </div>
+          )}
           {isAdmin && (
             <div>
               <Label>المنطقة *</Label>
