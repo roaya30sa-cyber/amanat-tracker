@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/components/ui/use-toast';
-import { Pencil, Trash2, Plus, Download, Wand2, Printer } from 'lucide-react';
+import { Pencil, Trash2, Plus, Download, Wand2, Printer, CheckCircle2 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { useRouter } from 'next/navigation';
 
@@ -55,15 +55,44 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
   });
 
   async function updateCompletion(id: number, value: number) {
-    // optimistic update
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, completion_percent: value, updated_at: Date.now() } : t));
+    // Slider→100 auto-marks completed; sliding off 100 brings it back to in_progress.
+    const current = tasks.find(t => t.id === id);
+    const payload: Record<string, unknown> = { completion_percent: value };
+    if (value >= 100 && current?.status !== 'completed') payload.status = 'completed';
+    if (value < 100 && current?.status === 'completed') payload.status = 'in_progress';
+
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === id
+      ? { ...t, completion_percent: value, status: (payload.status as Task['status']) ?? t.status, updated_at: Date.now() }
+      : t,
+    ));
     const res = await fetch(`/api/tasks/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completion_percent: value }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { error?: string };
       toast({ title: 'فشل التحديث', description: err.error ?? 'حدث خطأ', variant: 'destructive' });
+      startTransition(() => router.refresh());
+    }
+  }
+
+  async function markComplete(t: Task) {
+    if (t.status === 'completed') return;
+    // Optimistic: status=completed, completion=100
+    setTasks(prev => prev.map(x => x.id === t.id
+      ? { ...x, status: 'completed', completion_percent: 100, updated_at: Date.now() }
+      : x,
+    ));
+    const res = await fetch(`/api/tasks/${t.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', completion_percent: 100 }),
+    });
+    if (res.ok) {
+      toast({ title: '✓ تم تعليم المهمة كمكتملة' });
+    } else {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      toast({ title: 'فشل', description: err.error ?? 'حدث خطأ', variant: 'destructive' });
       startTransition(() => router.refresh());
     }
   }
@@ -103,7 +132,7 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
       priority: t.priority ? PRIORITY_AR[t.priority] : '',
       completion_pct: t.completion_percent,
       auto_pct: autoProgressPercent(t),
-      days_remaining: daysUntil(t.deadline) ?? '',
+      days_remaining: t.status === 'completed' ? 0 : (daysUntil(t.deadline) ?? ''),
       classification: statusClassification(t),
       notes: t.notes ?? '',
       created_at: new Date(t.created_at).toLocaleString('ar-SA'),
@@ -204,9 +233,15 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
                 <tr><td colSpan={14} className="p-8 text-center text-muted-foreground">لا توجد مهام مطابقة</td></tr>
               )}
               {filtered.map((t, i) => {
+                const isDone = t.status === 'completed';
                 const d = daysUntil(t.deadline);
-                const dCls = d === null ? '' : d < 0 ? 'text-brand-red font-bold' : d <= 7 ? 'text-brand-gold font-bold' : 'text-brand-green font-bold';
-                const dTxt = d === null ? '—' : d < 0 ? `متأخرة ${-d} يوم` : `${d} يوم`;
+                // Once a task is marked completed, days remaining is always 0 — the countdown stops.
+                const dCls = isDone
+                  ? 'text-brand-green font-bold'
+                  : d === null ? '' : d < 0 ? 'text-brand-red font-bold' : d <= 7 ? 'text-brand-gold font-bold' : 'text-brand-green font-bold';
+                const dTxt = isDone
+                  ? '0 يوم ✓'
+                  : d === null ? '—' : d < 0 ? `متأخرة ${-d} يوم` : `${d} يوم`;
                 const auto = autoProgressPercent(t);
                 const gap = progressGap(t.completion_percent, auto);
                 const gapClass = gap === 'behind' ? 'text-brand-red' : gap === 'ahead' ? 'text-brand-gold' : 'text-muted-foreground';
@@ -250,6 +285,11 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
                     </td>
                     <td className="p-3">
                       <div className="flex gap-1">
+                        {!isDone && (
+                          <Button size="icon" variant="ghost" title="اكتمال" onClick={() => markComplete(t)}>
+                            <CheckCircle2 className="h-4 w-4 text-brand-green" />
+                          </Button>
+                        )}
                         <Button size="icon" variant="ghost" onClick={() => openEdit(t)}><Pencil className="h-4 w-4" /></Button>
                         <Button size="icon" variant="ghost" onClick={() => deleteTask(t.id)}><Trash2 className="h-4 w-4 text-brand-red" /></Button>
                       </div>
