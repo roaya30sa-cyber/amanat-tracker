@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
-  LayoutDashboard, ClipboardList, AlertTriangle, CalendarDays, Users, Folder, LogOut, KeyRound, Building2,
+  LayoutDashboard, ClipboardList, AlertTriangle, Construction, Users, Folder, LogOut, KeyRound, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard',       label: 'لوحة التحكم',         icon: LayoutDashboard },
   { href: '/tasks',           label: 'المهام',              icon: ClipboardList },
   { href: '/risks',           label: 'سجل المخاطر',        icon: AlertTriangle },
-  { href: '/weekly-reports',  label: 'التقارير الأسبوعية',  icon: CalendarDays },
+  { href: '/obstacles',       label: 'العوائق التشغيلية',   icon: Construction },
   { href: '/admin/projects',  label: 'المشاريع',           icon: Building2, adminOnly: true },
   { href: '/admin/users',     label: 'المستخدمون',         icon: Users,     adminOnly: true },
   { href: '/admin/reference', label: 'البيانات المرجعية',  icon: Folder,    adminOnly: true },

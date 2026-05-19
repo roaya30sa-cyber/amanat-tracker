@@ -103,3 +103,63 @@ export interface TeamMember {
   job_title: string | null;
   task_category: string | null;
 }
+
+// =====================================================================
+// Phase 2: Obstacles (العوائق التشغيلية) + Notifications
+// =====================================================================
+
+export type ObstacleStatus =
+  | 'pending_approval'   // region manager opened, admin hasn't approved due date
+  | 'approved'           // admin approved (or auto-approved when admin opens) — work can start
+  | 'in_progress'        // recipient is working on it
+  | 'resolved'           // done
+  | 'rejected';          // admin rejected; closed
+
+/** Computed-at-read-time pseudo-status: true when approved_due_date < today AND status not in resolved/rejected. */
+export interface Obstacle {
+  id: number;
+  project_id: number;
+  project_name_ar?: string;
+  region_id: number | null;
+  region_name_ar?: string | null;
+  from_user_id: number;
+  from_user_name?: string | null;
+  from_user_role?: Role;
+  to_user_id: number;
+  to_user_name?: string | null;
+  to_user_role?: Role;
+  statement: string;
+  request: string | null;
+  notes: string | null;
+  status: ObstacleStatus;
+  proposed_due_date: string | null;       // YYYY-MM-DD
+  approved_due_date: string | null;
+  approved_by: number | null;
+  approved_at: number | null;
+  resolved_at: number | null;
+  rejected_reason: string | null;
+  created_at: number;
+  updated_at: number;
+  // Derived (filled by API GET responses):
+  is_overdue?: boolean;
+  days_remaining?: number | null;          // negative if overdue
+}
+
+export type NotificationKind =
+  | 'obstacle_new'
+  | 'obstacle_approved'
+  | 'obstacle_rejected'
+  | 'obstacle_in_progress'
+  | 'obstacle_resolved'
+  | 'obstacle_overdue';
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  kind: NotificationKind;
+  obstacle_id: number | null;
+  title: string;
+  body: string | null;
+  is_read: 0 | 1;
+  created_at: number;
+}

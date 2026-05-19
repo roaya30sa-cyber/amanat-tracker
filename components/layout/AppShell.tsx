@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { Sidebar } from './Sidebar';
 import { ProjectSwitcher } from './ProjectSwitcher';
+import { NotificationBell } from './NotificationBell';
 import { getDB } from '@/lib/db';
 import { PROJECT_COOKIE } from '@/lib/access';
 
@@ -64,6 +65,7 @@ export async function AppShell({ children, title }: AppShellProps) {
             {session.user.role === 'admin' && (
               <ProjectSwitcher activeProjectId={activeProjectId} />
             )}
+            <NotificationBell />
             <div className="text-sm text-muted-foreground">
               آخر تحديث: <span className="font-semibold text-brand-navy">{updatedAt}</span>
             </div>

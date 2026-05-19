@@ -6,7 +6,8 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CompletionBarChart, StatusDoughnut } from '@/components/dashboard/Charts';
 import { computeTaskStats, computeRiskStats, performanceLabel, performanceEval } from '@/lib/formulas';
 import { PROJECT_COOKIE } from '@/lib/access';
-import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle } from 'lucide-react';
+import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle, Construction, Clock } from 'lucide-react';
+import Link from 'next/link';
 
 export const runtime = 'edge';
 
@@ -39,18 +40,54 @@ export default async function DashboardPage() {
   const regionsWhere = activeProjectId ? 'WHERE project_id = ? OR project_id IS NULL' : '';
   const regionsBinds = activeProjectId ? [activeProjectId] : [];
 
-  const [tasksRes, risksRes, regionsRes, activeProj] = await Promise.all([
+  // Obstacles scoping is similar — for non-admins, restrict to "involving me".
+  const obsConds: string[] = [];
+  const obsBinds: any[] = [];
+  if (activeProjectId) { obsConds.push('o.project_id = ?'); obsBinds.push(activeProjectId); }
+  if (!isAdmin) {
+    obsConds.push('(o.from_user_id = ? OR o.to_user_id = ?)');
+    obsBinds.push(session.user.id, session.user.id);
+  }
+  const obsWhere = obsConds.length ? `WHERE ${obsConds.join(' AND ')}` : '';
+
+  const [tasksRes, risksRes, regionsRes, activeProj, obsRes] = await Promise.all([
     db.prepare(`SELECT region_id, status, completion_percent, deadline, project_id FROM tasks ${where}`).bind(...binds).all(),
     db.prepare(`SELECT region_id, probability, impact, risk_level, project_id FROM risks ${where}`).bind(...binds).all(),
     db.prepare(`SELECT id, code, name_ar, color_hex FROM regions ${regionsWhere} ORDER BY id`).bind(...regionsBinds).all(),
     activeProjectId
       ? db.prepare(`SELECT id, name_ar FROM projects WHERE id = ?`).bind(activeProjectId).first<{ id: number; name_ar: string }>()
       : Promise.resolve(null),
+    db.prepare(`
+      SELECT o.id, o.statement, o.status, o.approved_due_date, o.proposed_due_date, o.created_at,
+             o.from_user_id, o.to_user_id,
+             fu.username AS from_user_name, tu.username AS to_user_name
+        FROM obstacles o
+        JOIN users fu ON fu.id = o.from_user_id
+        JOIN users tu ON tu.id = o.to_user_id
+        ${obsWhere}
+        ORDER BY o.created_at DESC
+        LIMIT 50
+    `).bind(...obsBinds).all(),
   ]);
 
-  const tasks   = (tasksRes.results   ?? []) as any[];
-  const risks   = (risksRes.results   ?? []) as any[];
-  const regions = (regionsRes.results ?? []) as any[];
+  const tasks     = (tasksRes.results   ?? []) as any[];
+  const risks     = (risksRes.results   ?? []) as any[];
+  const regions   = (regionsRes.results ?? []) as any[];
+  const obstacles = (obsRes.results     ?? []) as any[];
+
+  // Compute obstacle KPIs
+  const todayMs = Date.now();
+  function isOverdue(o: any): boolean {
+    if (!o.approved_due_date) return false;
+    if (o.status === 'resolved' || o.status === 'rejected') return false;
+    const t = Date.parse(o.approved_due_date + 'T23:59:59Z');
+    return Number.isFinite(t) && t < todayMs;
+  }
+  const obsPending  = obstacles.filter(o => o.status === 'pending_approval').length;
+  const obsActive   = obstacles.filter(o => o.status === 'approved' || o.status === 'in_progress').length;
+  const obsOverdue  = obstacles.filter(isOverdue).length;
+  const obsResolved = obstacles.filter(o => o.status === 'resolved').length;
+  const recentObstacles = obstacles.slice(0, 6);
 
   const taskStats = computeTaskStats(tasks);
   const riskStats = computeRiskStats(risks);
@@ -105,6 +142,61 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-7">
         <CompletionBarChart data={chartData} title={chartTitle} />
         <StatusDoughnut completed={taskStats.completed} inProgress={taskStats.in_progress} notStarted={taskStats.not_started} />
+      </div>
+
+      {/* Obstacles widget */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-7">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className="text-lg font-bold text-brand-navy flex items-center gap-2"><Construction className="h-5 w-5" /> العوائق التشغيلية</h3>
+          <Link href="/obstacles" className="text-sm text-brand-teal hover:underline">عرض الكل →</Link>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <KpiCard label="بانتظار الاعتماد" value={obsPending}  icon={Clock}        color="gold" />
+          <KpiCard label="قيد التنفيذ"      value={obsActive}   icon={RefreshCw}    color="navy" />
+          <KpiCard label="متأخرة"            value={obsOverdue}  icon={AlertTriangle} color="red" />
+          <KpiCard label="تم حلها"           value={obsResolved} icon={CheckCircle2} color="green" />
+        </div>
+        {recentObstacles.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-brand-soft text-brand-navy">
+                <tr className="text-right">
+                  <th className="p-2 font-bold">البيان</th>
+                  <th className="p-2 font-bold">من → إلى</th>
+                  <th className="p-2 font-bold">الحالة</th>
+                  <th className="p-2 font-bold">الاستحقاق</th>
+                  <th className="p-2 font-bold">المنشأ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentObstacles.map(o => {
+                  const overdue = isOverdue(o);
+                  const due = o.approved_due_date ?? (o.proposed_due_date ? `مقترح: ${o.proposed_due_date}` : '—');
+                  const created = new Date(o.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+                  return (
+                    <tr key={o.id} className={`border-b border-slate-100 ${overdue ? 'bg-red-50/60' : ''}`}>
+                      <td className="p-2 max-w-[260px] truncate">{o.statement}</td>
+                      <td className="p-2 text-xs">{o.from_user_name} → {o.to_user_name}</td>
+                      <td className="p-2 text-xs">
+                        {overdue
+                          ? <span className="text-brand-red font-bold">⚠ متأخر</span>
+                          : ({
+                              pending_approval: 'بانتظار الاعتماد',
+                              approved:         'معتمد',
+                              in_progress:      'قيد التنفيذ',
+                              resolved:         'تم الحل',
+                              rejected:         'مرفوض',
+                            } as Record<string,string>)[o.status]}
+                      </td>
+                      <td className="p-2 text-xs whitespace-nowrap">{due}</td>
+                      <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">{created}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Regional breakdown — admin only */}
@@ -174,7 +266,7 @@ export default async function DashboardPage() {
         <ul className="space-y-2 text-sm text-muted-foreground leading-loose">
           <li>⬡ <b>إضافة مهمة:</b> من صفحة "المهام" اضغط "+ إضافة مهمة جديدة"</li>
           <li>⬡ <b>إضافة خطر:</b> من صفحة "سجل المخاطر" — مستوى الخطر يُحسب تلقائياً (الاحتمالية × التأثير)</li>
-          <li>⬡ <b>تتبع العوائق:</b> من صفحة "التقارير الأسبوعية"</li>
+          <li>⬡ <b>تتبع العوائق:</b> من صفحة "العوائق التشغيلية" — أرسل عائقاً للمدير، وسيعتمد المدير الإطار الزمني.</li>
           {isAdmin && <li>⬡ <b>تبديل المشروع:</b> من القائمة المنسدلة "المشروع" في أعلى الصفحة. اختر "جميع المشاريع" لرؤية البيانات المجمّعة.</li>}
           <li>⬡ جميع الإحصائيات تتحدث فوراً عند إضافة/تعديل أي بيان</li>
         </ul>
