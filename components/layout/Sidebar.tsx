@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
-  LayoutDashboard, ClipboardList, AlertTriangle, Construction, Users, Folder, LogOut, KeyRound, Building2,
+  LayoutDashboard, ClipboardList, AlertTriangle, Construction, Users, Folder, LogOut, KeyRound, Building2, MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
 
 interface NavItem { href: string; label: string; icon: any; adminOnly?: boolean; }
 
@@ -15,6 +16,7 @@ const NAV: NavItem[] = [
   { href: '/tasks',           label: 'المهام',              icon: ClipboardList },
   { href: '/risks',           label: 'سجل المخاطر',        icon: AlertTriangle },
   { href: '/obstacles',       label: 'العوائق التشغيلية',   icon: Construction },
+  { href: '/chat',            label: 'المحادثات',          icon: MessageCircle },
   { href: '/admin/projects',  label: 'المشاريع',           icon: Building2, adminOnly: true },
   { href: '/admin/users',     label: 'المستخدمون',         icon: Users,     adminOnly: true },
   { href: '/admin/reference', label: 'البيانات المرجعية',  icon: Folder,    adminOnly: true },
@@ -30,6 +32,23 @@ interface SidebarProps {
 export function Sidebar({ role, userName, regionLabel, projectLabel }: SidebarProps) {
   const pathname = usePathname();
   const visible = NAV.filter(n => !n.adminOnly || role === 'admin');
+
+  // Poll chat unread count every 15s for the sidebar badge.
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch('/api/chat/conversations', { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelled) setChatUnread(d.total_unread ?? 0);
+      } catch {}
+    }
+    load();
+    const t = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   return (
     <aside className="w-64 shrink-0 bg-brand-navy text-white flex flex-col sticky top-0 h-screen overflow-y-auto">
@@ -60,6 +79,11 @@ export function Sidebar({ role, userName, regionLabel, projectLabel }: SidebarPr
               >
                 <Icon className="h-5 w-5" />
                 <span>{item.label}</span>
+                {item.href === '/chat' && chatUnread > 0 && (
+                  <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-brand-red text-white text-[10px] font-bold flex items-center justify-center">
+                    {chatUnread > 99 ? '99+' : chatUnread}
+                  </span>
+                )}
               </Link>
             </div>
           );

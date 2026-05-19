@@ -163,3 +163,27 @@ export interface Notification {
   is_read: 0 | 1;
   created_at: number;
 }
+
+// =====================================================================
+// Phase 5: Chat
+// =====================================================================
+
+export interface ChatMessage {
+  id: number;
+  from_user_id: number;
+  to_user_id: number;
+  body: string;
+  is_read: 0 | 1;
+  created_at: number;
+}
+
+export interface ChatConversation {
+  other_user_id: number;
+  other_username: string;
+  other_full_name: string | null;
+  other_role: Role;
+  last_message: string | null;
+  last_message_at: number | null;
+  last_message_from_me: boolean;
+  unread_count: number;
+}
