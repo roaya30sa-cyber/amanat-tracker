@@ -48,6 +48,57 @@ export function statusClassification(task: Pick<Task, 'status' | 'deadline'>): s
   return 'ضمن الجدول';
 }
 
+// ---------- Auto-progress formula (مستوى التقدم المقترح) ----------
+// Combines status × remaining days × priority into a single 0-100 suggestion.
+// The user can apply the suggestion to `completion_percent`, or keep their manual value.
+//
+// Rules:
+//   completed       → 100
+//   not_started     → 0
+//   in_progress     → linear elapsed/total since created_at, ± priority adjustment
+//                     (high = +5 expected, low = -5; capped at 0..95 since "in progress" means not done yet)
+export function autoProgressPercent(task: Pick<Task, 'status' | 'deadline' | 'priority' | 'created_at'>): number {
+  if (task.status === 'completed')   return 100;
+  if (task.status === 'not_started') return 0;
+  if (!task.deadline)                return 50;
+  const deadlineTs = Date.parse(task.deadline);
+  if (!Number.isFinite(deadlineTs))  return 50;
+  const totalPeriod = deadlineTs - task.created_at;
+  if (totalPeriod <= 0)              return 50;
+  const elapsed = Date.now() - task.created_at;
+  const base = (elapsed / totalPeriod) * 100;
+  const boost = task.priority === 'high' ? 5 : task.priority === 'low' ? -5 : 0;
+  return Math.max(0, Math.min(95, Math.round(base + boost)));
+}
+
+/**
+ * Classification of the *gap* between auto-progress and manual progress —
+ * lets the UI nudge the user when the two are far apart.
+ *   on_track:   |manual - auto| ≤ 10
+ *   ahead:      manual > auto + 10
+ *   behind:     manual < auto - 10
+ */
+export function progressGap(manual: number, auto: number): 'on_track' | 'ahead' | 'behind' {
+  const gap = manual - auto;
+  if (gap > 10)  return 'ahead';
+  if (gap < -10) return 'behind';
+  return 'on_track';
+}
+
+// ---------- CSV export ----------
+/** Convert an array of objects to a CSV string. Always quotes every field. Includes header row. */
+export function toCSV<T extends Record<string, unknown>>(rows: T[], headers: { key: keyof T; label: string }[]): string {
+  const esc = (v: unknown) => {
+    if (v === null || v === undefined) return '""';
+    const s = String(v).replace(/"/g, '""');
+    return `"${s}"`;
+  };
+  const head = headers.map(h => esc(h.label)).join(',');
+  const body = rows.map(r => headers.map(h => esc(r[h.key])).join(',')).join('\n');
+  // UTF-8 BOM so Excel opens it as UTF-8 (and Arabic renders correctly)
+  return '﻿' + head + '\n' + body;
+}
+
 // ---------- Aggregations ----------
 export interface TaskStats {
   total: number;
