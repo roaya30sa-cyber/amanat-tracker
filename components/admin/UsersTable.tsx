@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { Pencil, Trash2, Plus, KeyRound, ShieldOff, ShieldCheck } from 'lucide-react';
+import { formatDateAr } from '@/lib/utils';
 
 const ROLE_AR: Record<Role,string> = { admin: 'مدير النظام', regional_manager: 'مدير منطقة', viewer: 'مشاهد' };
 
@@ -147,7 +148,7 @@ export function UsersTable({ initial, regions, projects, currentUserId }: Props)
             {users.map(u => {
               const region  = u.region_id  ? regions.find(r => r.id === u.region_id)   : null;
               const project = u.project_id ? projects.find(p => p.id === u.project_id) : null;
-              const lastLogin = u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('ar-SA') : '—';
+              const lastLogin = u.last_login_at ? formatDateAr(u.last_login_at) : '—';
               return (
                 <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="p-3 font-mono font-bold text-brand-navy ltr-only text-left">{u.username}</td>

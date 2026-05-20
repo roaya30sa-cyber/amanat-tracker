@@ -8,6 +8,7 @@ import { computeTaskStats, computeRiskStats, performanceLabel, performanceEval }
 import { PROJECT_COOKIE } from '@/lib/access';
 import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle, Construction, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { formatDateTimeAr } from '@/lib/utils';
 
 export const runtime = 'edge';
 
@@ -172,7 +173,7 @@ export default async function DashboardPage() {
                 {recentObstacles.map(o => {
                   const overdue = isOverdue(o);
                   const due = o.approved_due_date ?? (o.proposed_due_date ? `مقترح: ${o.proposed_due_date}` : '—');
-                  const created = new Date(o.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+                  const created = formatDateTimeAr(o.created_at);
                   return (
                     <tr key={o.id} className={`border-b border-slate-100 ${overdue ? 'bg-red-50/60' : ''}`}>
                       <td className="p-2 max-w-[260px] truncate">{o.statement}</td>

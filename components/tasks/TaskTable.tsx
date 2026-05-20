@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Pencil, Trash2, Plus, Download, Wand2, Printer, CheckCircle2 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { useRouter } from 'next/navigation';
+import { formatDateAr, formatDateTimeAr } from '@/lib/utils';
 
 interface Props {
   initial: Task[];
@@ -135,8 +136,8 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
       days_remaining: t.status === 'completed' ? 0 : (daysUntil(t.deadline) ?? ''),
       classification: statusClassification(t),
       notes: t.notes ?? '',
-      created_at: new Date(t.created_at).toLocaleString('ar-SA'),
-      updated_at: new Date(t.updated_at).toLocaleString('ar-SA'),
+      created_at: formatDateTimeAr(t.created_at),
+      updated_at: formatDateTimeAr(t.updated_at),
     })), [
       { key: 'id',              label: 'المعرف' },
       { key: 'project',         label: 'المشروع' },
@@ -245,8 +246,8 @@ export function TaskTable({ initial, regions, isAdmin, userRegionId }: Props) {
                 const auto = autoProgressPercent(t);
                 const gap = progressGap(t.completion_percent, auto);
                 const gapClass = gap === 'behind' ? 'text-brand-red' : gap === 'ahead' ? 'text-brand-gold' : 'text-muted-foreground';
-                const createdAt = new Date(t.created_at).toLocaleDateString('ar-SA');
-                const updatedAt = new Date(t.updated_at).toLocaleDateString('ar-SA');
+                const createdAt = formatDateAr(t.created_at);
+                const updatedAt = formatDateAr(t.updated_at);
                 return (
                   <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="p-3 text-muted-foreground">{i+1}</td>

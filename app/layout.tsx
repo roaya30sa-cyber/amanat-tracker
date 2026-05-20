@@ -12,8 +12,13 @@ const tajawal = Tajawal({
 });
 
 export const metadata: Metadata = {
-  title: 'أداة متابعة أعمال مشاريع الأمانة',
-  description: 'نظام إدارة المشاريع الإقليمية — منطقة جازان · المنطقة الشرقية · الحدود الشمالية',
+  title: 'HLB — أداة متابعة أعمال مشاريع الأمانة',
+  description: 'المحاسبون الدوليون — نظام إدارة المشاريع الإقليمية: منطقة جازان · المنطقة الشرقية · الحدود الشمالية',
+  icons: {
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+    ],
+  },
 };
 
 export const runtime = 'edge';

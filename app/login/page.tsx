@@ -11,7 +11,12 @@ export default async function LoginPage({ searchParams }: { searchParams: { erro
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-navy to-brand-teal p-6">
       <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full text-center">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-navy rounded-2xl text-white text-4xl mb-4">🏛️</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="المحاسبون الدوليون HLB"
+          className="mx-auto mb-5 h-20 w-auto object-contain"
+        />
         <h1 className="text-2xl font-bold text-brand-navy mb-2">أداة متابعة أعمال مشاريع الأمانة</h1>
         <p className="text-muted-foreground text-sm mb-7 leading-relaxed">
           نظام إدارة المشاريع الإقليمية<br/>

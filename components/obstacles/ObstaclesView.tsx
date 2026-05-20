@@ -10,6 +10,7 @@ import { ObstacleStatusBadge } from './ObstacleStatusBadge';
 import { ObstacleModal } from './ObstacleModal';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { toCSV } from '@/lib/formulas';
+import { formatDateTimeAr } from '@/lib/utils';
 
 const STATUS_LABEL: Record<ObstacleStatus, string> = {
   pending_approval: 'بانتظار الاعتماد',
@@ -97,8 +98,8 @@ export function ObstaclesView({ currentUserId, currentUserRole }: Props) {
       approved_due: o.approved_due_date ?? '',
       days_remaining: o.days_remaining ?? '',
       is_overdue: o.is_overdue ? 'نعم' : 'لا',
-      created_at: new Date(o.created_at).toLocaleString('ar-SA'),
-      resolved_at: o.resolved_at ? new Date(o.resolved_at).toLocaleString('ar-SA') : '',
+      created_at: formatDateTimeAr(o.created_at),
+      resolved_at: o.resolved_at ? formatDateTimeAr(o.resolved_at) : '',
     })), [
       { key: 'id',             label: 'المعرف' },
       { key: 'project',        label: 'المشروع' },
@@ -174,7 +175,7 @@ export function ObstaclesView({ currentUserId, currentUserRole }: Props) {
               {!loading && items.map(o => {
                 const isRecipient = o.to_user_id   === currentUserId;
                 const isSender    = o.from_user_id === currentUserId;
-                const createdAt = new Date(o.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+                const createdAt = formatDateTimeAr(o.created_at);
                 const dueLabel  = o.approved_due_date
                   ? `${o.approved_due_date} (${o.days_remaining! >= 0 ? `بعد ${o.days_remaining} يوم` : `متأخر ${Math.abs(o.days_remaining!)} يوم`})`
                   : (o.proposed_due_date ? `مقترح: ${o.proposed_due_date}` : '—');

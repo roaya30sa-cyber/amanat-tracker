@@ -6,6 +6,7 @@ import { ProjectSwitcher } from './ProjectSwitcher';
 import { NotificationBell } from './NotificationBell';
 import { getDB } from '@/lib/db';
 import { PROJECT_COOKIE } from '@/lib/access';
+import { formatDateTimeAr } from '@/lib/utils';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -48,7 +49,7 @@ export async function AppShell({ children, title }: AppShellProps) {
     } catch {}
   }
 
-  const updatedAt = new Date().toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' });
+  const updatedAt = formatDateTimeAr(new Date());
 
   return (
     <div className="flex min-h-screen">
@@ -59,6 +60,19 @@ export async function AppShell({ children, title }: AppShellProps) {
         projectLabel={projectLabel ?? (session.user.role === 'admin' ? 'جميع المشاريع' : '—')}
       />
       <main className="flex-1 p-6 lg:p-8 overflow-x-hidden">
+        {/* Print-only header — visible only when window.print() runs */}
+        <div className="hidden print:flex print:items-center print:justify-between print:mb-4 print:pb-3 print:border-b print:border-slate-300">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="HLB" className="h-12 w-auto" />
+          <div className="text-right">
+            <div className="font-bold text-brand-navy">{title}</div>
+            <div className="text-xs text-muted-foreground">{updatedAt}</div>
+            {projectLabel && projectLabel !== 'جميع المشاريع' && projectLabel !== '—' && (
+              <div className="text-xs text-muted-foreground">المشروع: {projectLabel}</div>
+            )}
+          </div>
+        </div>
+
         <header className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl lg:text-3xl font-bold text-brand-navy">{title}</h1>
           <div className="flex items-center gap-4 flex-wrap">

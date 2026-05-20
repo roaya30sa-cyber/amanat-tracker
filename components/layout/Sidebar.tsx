@@ -52,11 +52,16 @@ export function Sidebar({ role, userName, regionLabel, projectLabel }: SidebarPr
 
   return (
     <aside className="w-64 shrink-0 bg-brand-navy text-white flex flex-col sticky top-0 h-screen overflow-y-auto">
-      <div className="p-5 border-b border-white/10 flex items-center gap-3">
-        <div className="w-10 h-10 bg-brand-teal rounded-xl flex items-center justify-center text-xl">🏛️</div>
-        <div>
-          <h2 className="font-bold text-sm leading-tight">أداة متابعة<br/>مشاريع الأمانة</h2>
-        </div>
+      <div className="p-4 border-b border-white/10 bg-white/95">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.png"
+          alt="المحاسبون الدوليون HLB"
+          className="block mx-auto h-14 w-auto object-contain"
+        />
+        <h2 className="font-bold text-[11px] leading-tight text-brand-navy text-center mt-2">
+          أداة متابعة مشاريع الأمانة
+        </h2>
       </div>
 
       <nav className="flex-1 p-3 space-y-1">

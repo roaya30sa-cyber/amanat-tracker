@@ -11,6 +11,7 @@ import { Pencil, Trash2, Plus, Download, Printer } from 'lucide-react';
 import { RiskModal } from './RiskModal';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { BarChart3, AlertOctagon, AlertTriangle, AlertCircle, Info, TrendingUp } from 'lucide-react';
+import { formatDateTimeAr } from '@/lib/utils';
 
 interface Props {
   initial: Risk[];
@@ -63,8 +64,8 @@ export function RiskTable({ initial, regions, categories, isAdmin, userRegionId 
       owner: r.owner ?? '',
       status: RISK_STATUS_AR[r.status] ?? r.status,
       notes: r.notes ?? '',
-      created_at: new Date(r.created_at).toLocaleString('ar-SA'),
-      updated_at: new Date(r.updated_at).toLocaleString('ar-SA'),
+      created_at: formatDateTimeAr(r.created_at),
+      updated_at: formatDateTimeAr(r.updated_at),
     })), [
       { key: 'id',               label: 'المعرف' },
       { key: 'project',          label: 'المشروع' },

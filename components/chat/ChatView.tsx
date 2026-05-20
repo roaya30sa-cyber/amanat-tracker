@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Search } from 'lucide-react';
 import type { ChatConversation, ChatMessage, Role } from '@/lib/types';
+import { formatDateTimeAr } from '@/lib/utils';
 
 const ROLE_LABEL: Record<Role, string> = {
   admin: 'مدير النظام',
@@ -144,7 +145,7 @@ export function ChatView({ currentUserId }: { currentUserId: number }) {
               ? (c.last_message_from_me ? 'أنت: ' : '') + c.last_message
               : '— لا توجد رسائل —';
             const when = c.last_message_at
-              ? new Date(c.last_message_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })
+              ? formatDateTimeAr(c.last_message_at)
               : '';
             return (
               <button
@@ -201,7 +202,7 @@ export function ChatView({ currentUserId }: { currentUserId: number }) {
               )}
               {messages.map(m => {
                 const mine = m.from_user_id === currentUserId;
-                const when = new Date(m.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+                const when = formatDateTimeAr(m.created_at);
                 return (
                   <div key={m.id} className={`flex ${mine ? 'justify-start' : 'justify-end'}`}>
                     <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${mine ? 'bg-brand-navy text-white' : 'bg-white border border-slate-200'}`}>

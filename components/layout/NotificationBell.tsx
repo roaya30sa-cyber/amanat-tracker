@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Bell, Check } from 'lucide-react';
-import type { Notification } from '@/lib/types';
+import type { Notification as AppNotification } from '@/lib/types';
+import { formatDateTimeAr } from '@/lib/utils';
 
 const POLL_MS = 30_000;
 
@@ -18,7 +19,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<Notification[]>([]);
+  const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
@@ -90,7 +91,7 @@ export function NotificationBell() {
               <div className="p-6 text-center text-sm text-muted-foreground">لا توجد تنبيهات</div>
             )}
             {items.map(n => {
-              const when = new Date(n.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' });
+              const when = formatDateTimeAr(n.created_at);
               return (
                 <Link
                   key={n.id}
