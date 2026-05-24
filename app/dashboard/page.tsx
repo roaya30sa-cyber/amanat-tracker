@@ -6,7 +6,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CompletionBarChart, StatusDoughnut } from '@/components/dashboard/Charts';
 import { computeTaskStats, computeRiskStats, performanceLabel, performanceEval } from '@/lib/formulas';
 import { PROJECT_COOKIE } from '@/lib/access';
-import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle, Construction, Clock } from 'lucide-react';
+import { ClipboardList, CheckCircle2, RefreshCw, AlertTriangle, TrendingUp, PauseCircle, Construction, Clock, Megaphone, Inbox } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTimeAr } from '@/lib/utils';
 
@@ -51,7 +51,17 @@ export default async function DashboardPage() {
   }
   const obsWhere = obsConds.length ? `WHERE ${obsConds.join(' AND ')}` : '';
 
-  const [tasksRes, risksRes, regionsRes, activeProj, obsRes] = await Promise.all([
+  // Circulars KPI scoping. Admin sees all in scope; managers see only theirs.
+  const circConds: string[] = ["c.status = 'active'"];
+  const circBinds: any[] = [];
+  if (activeProjectId) { circConds.push('(c.project_id = ? OR c.project_id IS NULL)'); circBinds.push(activeProjectId); }
+  if (!isAdmin) {
+    circConds.push(`EXISTS(SELECT 1 FROM circular_recipients WHERE circular_id = c.id AND user_id = ?)`);
+    circBinds.push(session.user.id);
+  }
+  const circWhere = `WHERE ${circConds.join(' AND ')}`;
+
+  const [tasksRes, risksRes, regionsRes, activeProj, obsRes, circRes] = await Promise.all([
     db.prepare(`SELECT region_id, status, completion_percent, deadline, project_id FROM tasks ${where}`).bind(...binds).all(),
     db.prepare(`SELECT region_id, probability, impact, risk_level, project_id FROM risks ${where}`).bind(...binds).all(),
     db.prepare(`SELECT id, code, name_ar, color_hex FROM regions ${regionsWhere} ORDER BY id`).bind(...regionsBinds).all(),
@@ -69,12 +79,33 @@ export default async function DashboardPage() {
         ORDER BY o.created_at DESC
         LIMIT 50
     `).bind(...obsBinds).all(),
+    db.prepare(`
+      SELECT c.id, c.title, c.ack_deadline, c.created_by,
+             (SELECT COUNT(*) FROM circular_recipients WHERE circular_id = c.id) AS total_recipients,
+             (SELECT COUNT(*) FROM circular_recipients WHERE circular_id = c.id AND acknowledged_at IS NOT NULL) AS acknowledged_count,
+             (SELECT acknowledged_at FROM circular_recipients WHERE circular_id = c.id AND user_id = ?) AS my_acknowledged_at,
+             EXISTS(SELECT 1 FROM circular_recipients WHERE circular_id = c.id AND user_id = ?) AS is_my_recipient
+        FROM circulars c
+        ${circWhere}
+    `).bind(session.user.id, session.user.id, ...circBinds).all(),
   ]);
 
   const tasks     = (tasksRes.results   ?? []) as any[];
   const risks     = (risksRes.results   ?? []) as any[];
   const regions   = (regionsRes.results ?? []) as any[];
   const obstacles = (obsRes.results     ?? []) as any[];
+  const circulars = (circRes.results    ?? []) as any[];
+
+  // Compute circulars KPIs
+  function isCircularOverdue(c: any, mine: boolean): boolean {
+    if (!c.ack_deadline) return false;
+    const t = Date.parse(c.ack_deadline + 'T23:59:59Z');
+    if (!Number.isFinite(t) || t >= Date.now()) return false;
+    return mine ? (c.is_my_recipient && !c.my_acknowledged_at) : (c.acknowledged_count < c.total_recipients);
+  }
+  const circMyPending  = circulars.filter(c => c.is_my_recipient && !c.my_acknowledged_at).length;
+  const circMyOverdue  = circulars.filter(c => isCircularOverdue(c, true)).length;
+  const circSentPending = circulars.filter(c => c.created_by === session.user.id && c.acknowledged_count < c.total_recipients).length;
 
   // Compute obstacle KPIs
   const todayMs = Date.now();
@@ -198,6 +229,21 @@ export default async function DashboardPage() {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Circulars widget */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-7">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className="text-lg font-bold text-brand-navy flex items-center gap-2"><Megaphone className="h-5 w-5" /> التعاميم</h3>
+          <Link href="/circulars" className="text-sm text-brand-teal hover:underline">عرض الكل →</Link>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {isAdmin && (
+            <KpiCard label="تعاميم بانتظار التأكيد (مُرسَلة)" value={circSentPending} icon={Megaphone}    color="gold" />
+          )}
+          <KpiCard label="بانتظار تأكيدي"  value={circMyPending} icon={Inbox}         color="navy" />
+          <KpiCard label="متأخرة عن التأكيد" value={circMyOverdue} icon={AlertTriangle} color="red"  />
+        </div>
       </div>
 
       {/* Regional breakdown — admin only */}

@@ -151,17 +151,75 @@ export type NotificationKind =
   | 'obstacle_rejected'
   | 'obstacle_in_progress'
   | 'obstacle_resolved'
-  | 'obstacle_overdue';
+  | 'obstacle_overdue'
+  // Circulars (Phase 6)
+  | 'circular_new'
+  | 'circular_updated'
+  | 'circular_reminder'
+  | 'circular_overdue'
+  | 'circular_all_acked';
 
 export interface Notification {
   id: number;
   user_id: number;
   kind: NotificationKind;
   obstacle_id: number | null;
+  circular_id: number | null;
   title: string;
   body: string | null;
   is_read: 0 | 1;
   created_at: number;
+}
+
+// =====================================================================
+// Phase 6: التعاميم (Circulars) — admin → managers, with per-recipient acknowledgement
+// =====================================================================
+
+export type CircularAudience = 'all_managers' | 'specific';
+export type CircularStatus   = 'active' | 'archived';
+
+export interface Circular {
+  id: number;
+  project_id: number | null;
+  project_name_ar?: string | null;
+  created_by: number;
+  created_by_name?: string | null;
+  title: string;
+  body: string;
+  audience: CircularAudience;
+  ack_deadline: string | null;          // YYYY-MM-DD
+  status: CircularStatus;
+  created_at: number;
+  updated_at: number;
+  // Derived (filled by API GET responses):
+  total_recipients?: number;
+  acknowledged_count?: number;
+  my_acknowledged_at?: number | null;   // for the current user (if they are a recipient)
+  is_my_recipient?: boolean;            // does the current user receive this circular?
+  is_overdue?: boolean;                 // ack_deadline < today AND any recipient not yet acked
+  is_my_overdue?: boolean;              // ack_deadline < today AND _I_ haven't acked yet
+}
+
+export interface CircularRecipientRow {
+  circular_id: number;
+  user_id: number;
+  user_username?: string;
+  user_full_name?: string | null;
+  user_region_id?: number | null;
+  user_region_name_ar?: string | null;
+  acknowledged_at: number | null;
+  acknowledged_note: string | null;
+}
+
+export interface CircularAttachment {
+  id: number;
+  circular_id: number;
+  file_name: string;
+  file_size: number;
+  content_type: string | null;
+  object_key: string;
+  uploaded_by: number;
+  uploaded_at: number;
 }
 
 // =====================================================================

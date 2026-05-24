@@ -15,6 +15,12 @@ const KIND_LABEL: Record<string, string> = {
   obstacle_in_progress: '▶️',
   obstacle_resolved:    '🎉',
   obstacle_overdue:     '⏰',
+  // Circulars
+  circular_new:        '📢',
+  circular_updated:    '✏️',
+  circular_reminder:   '⏰',
+  circular_overdue:    '🔴',
+  circular_all_acked:  '✅',
 };
 
 export function NotificationBell() {
@@ -92,10 +98,11 @@ export function NotificationBell() {
             )}
             {items.map(n => {
               const when = formatDateTimeAr(n.created_at);
+              const href = n.circular_id ? '/circulars' : '/obstacles';
               return (
                 <Link
                   key={n.id}
-                  href="/obstacles"
+                  href={href}
                   onClick={() => { if (!n.is_read) markRead(n.id); setOpen(false); }}
                   className={`block px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors ${n.is_read ? 'opacity-70' : 'bg-brand-soft/30'}`}
                 >
