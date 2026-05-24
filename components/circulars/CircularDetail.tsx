@@ -8,9 +8,29 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowRight, CheckCircle2, Clock, Pencil, Archive, AlertTriangle, Printer } from 'lucide-react';
-import type { Circular, CircularRecipientRow, Role } from '@/lib/types';
+import { ArrowRight, CheckCircle2, Clock, Pencil, Archive, AlertTriangle, Printer, Paperclip, Download, X, Trash2 } from 'lucide-react';
+import type { Circular, CircularAttachment, CircularRecipientRow, Role } from '@/lib/types';
 import { formatDateAr, formatDateTimeAr } from '@/lib/utils';
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'];
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function fileEmoji(ct: string | null): string {
+  if (!ct) return '📎';
+  if (ct.startsWith('image/')) return '🖼️';
+  if (ct === 'application/pdf') return '📕';
+  if (ct.includes('word') || ct === 'application/msword') return '📘';
+  if (ct.includes('sheet') || ct.includes('excel')) return '📗';
+  if (ct.includes('presentation') || ct.includes('powerpoint')) return '📙';
+  return '📎';
+}
 
 interface Props {
   circularId: number;
@@ -36,25 +56,72 @@ export function CircularDetail({
   const [ackNote, setAckNote] = useState('');
   const [acking, setAcking] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [attachments, setAttachments] = useState<(CircularAttachment & { uploaded_by_name?: string })[]>([]);
+  const [uploadingNew, setUploadingNew] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/circulars/${circularId}`, { cache: 'no-store' });
-      if (!r.ok) {
-        const e = (await r.json().catch(() => ({}))) as { error?: string };
+      // Detail + attachments in parallel.
+      const [detailRes, attRes] = await Promise.all([
+        fetch(`/api/circulars/${circularId}`, { cache: 'no-store' }),
+        fetch(`/api/circulars/${circularId}/attachments`, { cache: 'no-store' }),
+      ]);
+      if (!detailRes.ok) {
+        const e = (await detailRes.json().catch(() => ({}))) as { error?: string };
         toast({ title: 'فشل التحميل', description: e.error, variant: 'destructive' });
         return;
       }
-      const d = await r.json();
+      const d = await detailRes.json();
       setCircular(d.circular);
       setRecipients(d.recipients ?? []);
       setMyAck(d.my_acknowledged_at);
       setIsMyRecipient(!!d.is_my_recipient);
+      if (attRes.ok) setAttachments(await attRes.json());
     } finally {
       setLoading(false);
     }
   }, [circularId, toast]);
+
+  async function uploadFiles(filesToUpload: File[]) {
+    setUploadingNew(true);
+    let added: any[] = [];
+    let failed = 0;
+    for (const f of filesToUpload) {
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      if (f.size > MAX_FILE_BYTES || !ALLOWED_EXTENSIONS.includes(ext)) {
+        failed++;
+        toast({ title: `تم تخطي ${f.name}`, description: 'الحجم أو النوع غير مسموح', variant: 'destructive' });
+        continue;
+      }
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch(`/api/circulars/${circularId}/attachments`, { method: 'POST', body: fd });
+      if (res.ok) added.push(await res.json());
+      else {
+        failed++;
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({ title: `فشل رفع ${f.name}`, description: err.error, variant: 'destructive' });
+      }
+    }
+    if (added.length) {
+      setAttachments(prev => [...prev, ...added]);
+      toast({ title: `تم رفع ${added.length} ملف${failed ? ` (فشل ${failed})` : ''}` });
+    }
+    setUploadingNew(false);
+  }
+
+  async function deleteAttachment(attId: number) {
+    if (!confirm('حذف هذا المرفق نهائياً؟')) return;
+    const res = await fetch(`/api/circulars/${circularId}/attachments/${attId}`, { method: 'DELETE' });
+    if (res.ok) {
+      setAttachments(prev => prev.filter(a => a.id !== attId));
+      toast({ title: 'تم الحذف' });
+    } else {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      toast({ title: 'فشل الحذف', description: err.error, variant: 'destructive' });
+    }
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -142,6 +209,73 @@ export function CircularDetail({
         <div className="whitespace-pre-wrap text-sm leading-loose text-slate-800 border border-slate-100 rounded-lg p-4 bg-slate-50/50">
           {circular.body}
         </div>
+
+        {/* Attachments */}
+        {(attachments.length > 0 || canEdit) && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <Label className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> المرفقات ({attachments.length})</Label>
+              {canEdit && (
+                <label className="inline-flex items-center gap-1.5 text-xs text-brand-teal cursor-pointer hover:underline">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  {uploadingNew ? 'جاري الرفع...' : 'إضافة مرفق'}
+                  <input
+                    type="file"
+                    multiple
+                    accept={ALLOWED_EXTENSIONS.join(',')}
+                    disabled={uploadingNew}
+                    className="hidden"
+                    onChange={(e) => {
+                      const picked = Array.from(e.target.files ?? []);
+                      if (picked.length) uploadFiles(picked);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            {attachments.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-2">لا توجد مرفقات بعد</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {attachments.map(a => (
+                  <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <a
+                      href={`/api/circulars/${circular.id}/attachments/${a.id}`}
+                      className="flex items-center gap-2 text-sm flex-1 min-w-0 hover:text-brand-teal"
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      <span className="text-lg leading-none">{fileEmoji(a.content_type)}</span>
+                      <span className="truncate">{a.file_name}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">({humanSize(a.file_size)})</span>
+                    </a>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a
+                        href={`/api/circulars/${circular.id}/attachments/${a.id}`}
+                        className="p-1.5 hover:bg-white rounded text-brand-teal"
+                        download={a.file_name}
+                        title="تنزيل"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => deleteAttachment(a.id)}
+                          className="p-1.5 hover:bg-white rounded text-brand-red"
+                          title="حذف"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* Acknowledgement banner */}
         {isMyRecipient && (

@@ -1,13 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { Paperclip, X } from 'lucide-react';
 import type { Circular, Project, User } from '@/lib/types';
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'];
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 interface Props {
   open: boolean;
@@ -40,6 +51,9 @@ export function CircularCreateModal({ open, onOpenChange, onCreated }: Props) {
     ack_deadline: '',
     project_id: initialProjectId as number | null,  // null = cross-project
   });
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load projects + active managers when modal opens.
   useEffect(() => {
@@ -70,6 +84,25 @@ export function CircularCreateModal({ open, onOpenChange, onCreated }: Props) {
     }));
   }
 
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    const rejected: string[] = [];
+    const accepted: File[] = [];
+    for (const f of picked) {
+      if (f.size > MAX_FILE_BYTES) { rejected.push(`${f.name} (الحجم > 15MB)`); continue; }
+      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+      if (!ALLOWED_EXTENSIONS.includes(ext)) { rejected.push(`${f.name} (نوع غير مسموح)`); continue; }
+      accepted.push(f);
+    }
+    if (rejected.length) toast({ title: 'تم تخطي بعض الملفات', description: rejected.join(' • '), variant: 'destructive' });
+    setFiles(prev => [...prev, ...accepted]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removeFile(idx: number) {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !form.body.trim()) {
@@ -96,15 +129,35 @@ export function CircularCreateModal({ open, onOpenChange, onCreated }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        const c: Circular = await res.json();
-        onCreated(c);
-      } else {
+      if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         toast({ title: 'فشل الإرسال', description: err.error ?? 'حدث خطأ', variant: 'destructive' });
+        return;
       }
+      const c: Circular = await res.json();
+
+      // Upload attachments one by one so the user sees progress per file.
+      // If any upload fails the circular still exists; the user can retry from the detail page.
+      let failed = 0;
+      for (let i = 0; i < files.length; i++) {
+        setUploadingIdx(i);
+        const fd = new FormData();
+        fd.append('file', files[i]);
+        const upRes = await fetch(`/api/circulars/${c.id}/attachments`, { method: 'POST', body: fd });
+        if (!upRes.ok) {
+          failed++;
+          const err = (await upRes.json().catch(() => ({}))) as { error?: string };
+          toast({ title: `فشل رفع: ${files[i].name}`, description: err.error, variant: 'destructive' });
+        }
+      }
+      setUploadingIdx(null);
+      if (failed > 0) {
+        toast({ title: `أُرسل التعميم — فشل رفع ${failed} من ${files.length} ملف`, description: 'يمكنك إعادة المحاولة من صفحة التعميم', variant: 'destructive' });
+      }
+      onCreated(c);
     } finally {
       setSaving(false);
+      setUploadingIdx(null);
     }
   }
 
@@ -199,6 +252,46 @@ export function CircularCreateModal({ open, onOpenChange, onCreated }: Props) {
               onChange={e => setForm({ ...form, ack_deadline: e.target.value })}
             />
             <p className="text-xs text-muted-foreground mt-1">إذا حُدِّد ولم يؤكد المستلم قبله، يُرسَل له تذكير قبل الموعد بـ 24 ساعة وتنبيه أحمر عند التجاوز</p>
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <Label className="flex items-center gap-1.5"><Paperclip className="h-4 w-4" /> المرفقات (اختياري)</Label>
+            <div className="mt-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ALLOWED_EXTENSIONS.join(',')}
+                onChange={onFileChange}
+                className="hidden"
+                id="circular-files"
+              />
+              <label
+                htmlFor="circular-files"
+                className="inline-flex items-center gap-2 px-4 py-2 border border-dashed border-slate-300 rounded-lg cursor-pointer text-sm hover:bg-slate-50"
+              >
+                <Paperclip className="h-4 w-4" />
+                اختيار ملفات (PDF / صور / Word / Excel — حد 15MB لكل ملف)
+              </label>
+            </div>
+            {files.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {files.map((f, i) => (
+                  <li key={i} className={`flex items-center justify-between text-xs bg-slate-50 rounded px-2 py-1.5 ${uploadingIdx === i ? 'bg-brand-soft/40' : ''}`}>
+                    <span className="truncate flex-1">
+                      📎 {f.name} <span className="text-muted-foreground">({humanSize(f.size)})</span>
+                      {uploadingIdx === i && <span className="mr-2 text-brand-teal">⏳ جاري الرفع...</span>}
+                    </span>
+                    {uploadingIdx === null && (
+                      <button type="button" onClick={() => removeFile(i)} className="text-brand-red p-1 hover:bg-white rounded" aria-label="إزالة">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <DialogFooter>
